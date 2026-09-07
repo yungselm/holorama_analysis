@@ -9,7 +9,8 @@ from pathlib import Path
 import multimodars as mm
 import trimesh
 
-from multimodars_performance.mm_perf import CaseResult
+from multimodars_performance.mm_perf import REFERENCES_PATH, CaseResult
+from multimodars_performance.refs_cache import save_references
 
 
 def run_case(case_path: Path) -> CaseResult:
@@ -20,14 +21,14 @@ def run_case(case_path: Path) -> CaseResult:
                 aorta_cl = mm.prepare_centerline(
                     mm.load_centerline("./ao_cl.vtp", name="Aorta"), 
                     spacing_mm=0.5, 
-                    smoothing_sigma=1.5
+                    smooth_sigma=1.5
                 )
                 rca_cl = mm.prepare_centerline(
                     mm.load_centerline("./rca_cl.vtp", name="RCA"), 
                     ref_centerline=aorta_cl, 
                     spacing_mm=0.5, 
                     rm_start_mm=5.0, 
-                    smoothing_sigma=1.5
+                    smooth_sigma=1.5
                 )
                 lca_cl = mm.prepare_centerline(
                     mm.load_centerline("./lca_cl.vtp", name="LCA"), 
@@ -66,6 +67,10 @@ def run_case(case_path: Path) -> CaseResult:
                     bspline_smoothing=5.0, 
                     control_plot=False,
                 )
+
+            # 0.3.4 has no discretize_vessel_tree and so cannot derive these;
+            # cache them so its pipeline can align against the same triplet.
+            save_references(REFERENCES_PATH, case_path.name, tree.rca_references[0])
 
             with result.timed("intravascular_alignment"):
                 rest, _ = mm.from_file_singlepair(

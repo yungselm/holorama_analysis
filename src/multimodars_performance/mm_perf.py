@@ -15,7 +15,15 @@ from pathlib import Path
 from time import perf_counter
 
 PATH_TEST_DATA = Path(os.environ.get("PATH_TEST_DATA", "C:/Users/ansel/OneDrive/Dokumente/3_Research/data_holorama_test/anomalies"))
-OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_DIR = PROJECT_ROOT / "output"
+
+# Inputs shared between pipeline versions, kept out of the read-only test-data
+# tree.  `rca_references.json` is written by 0.7.0 and read by 0.3.4 (see
+# refs_cache); `centerlines_csv` holds the .vtp -> CSV conversion 0.3.4 needs.
+FIXTURES_DIR = PROJECT_ROOT / "fixtures"
+REFERENCES_PATH = FIXTURES_DIR / "rca_references.json"
+CENTERLINE_CSV_DIR = FIXTURES_DIR / "centerlines_csv"
 
 PIPELINES = {
     "0.3.4": "multimodars_performance.multimodars_0_3_4",

@@ -12,3 +12,6 @@ __pycache__/
 .ipynb_checkpoints/
 
 /output
+
+# Derived from the .vtp centerlines by compat_0_3_4; regenerated on demand
+/fixtures/centerlines_csv
