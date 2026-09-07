@@ -25,6 +25,34 @@ uv sync && uv run python src/main.py
 
 Override the test-data location with the `PATH_TEST_DATA` environment variable.
 
+Once both CSVs exist, build the figures and summary tables into `output/plots/`:
+
+```bash
+uv run python src/make_plots.py
+```
+
+| File | What it shows |
+| --- | --- |
+| `per_step.png` | one linear panel per block, 0.3.4 vs 0.7.0 |
+| `total.png` | end-to-end time, and the per-case sum over the blocks no case failed |
+| `*_normalized.png` | the same, divided by input size |
+| `summary.csv`, `summary_normalized.csv` | medians, IQRs, ratios and P values |
+
+Box plots with every case overplotted, since with 14 cases spanning 43k-280k
+mesh vertices the spread is the result rather than noise around it. Blocks
+differ by three orders of magnitude, so they are drawn as small multiples -
+each panel linear and starting at zero - instead of sharing one squeezed axis.
+P values are two-sided paired Wilcoxon signed-rank tests over the cases both
+versions completed; pairs below five are marked underpowered, because the test
+cannot reach significance there. Normalization divides by the case's CCTA mesh
+vertex count, except `intravascular_alignment`, which divides by its IVUS
+contour-point count.
+
+Blocks one version crashed on are labelled in red with the failure count, and
+the totals come in two flavours: end to end over the cases that finished in
+both versions, and the per-case sum over only the blocks no case failed, so
+that one is backed by every case.
+
 ## Why 0.7.0 has to run first
 
 `align_combined` needs an (aortic, superior, inferior) reference triplet at the
