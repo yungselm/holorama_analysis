@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environments
+.venv/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.ipynb_checkpoints/
