@@ -1,9 +1,9 @@
-"""Publication figures comparing the multimodars 0.3.4 and 0.7.0 benchmarks.
+"""Publication figures comparing the multimodars 0.3.4 and 0.7.1 benchmarks.
 
 Reads the CSVs written by `mm_perf.run_pipeline` and produces, into
 `output/plots/`:
 
-* `per_step.png`            - box plots, 0.3.4 vs 0.7.0, one panel per block
+* `per_step.png`            - box plots, 0.3.4 vs 0.7.1, one panel per block
 * `total.png`               - box plots of the whole-pipeline time
 * `per_step_normalized.png` - the same per block, per input point
 * `total_normalized.png`    - the same for the total
@@ -20,6 +20,12 @@ its own axis in seconds - rather than squeezed onto one shared scale.
 Each pair carries a paired Wilcoxon signed-rank p-value over the cases both
 versions completed: paired because the same case is timed twice, rank-based
 because per-case runtimes are strongly skewed by mesh size.
+
+The boxes themselves are not restricted to those cases - each version is shown
+over every case it measured, with its own n under the box. `stitching` and
+`post_processing` ran on all 14 cases in 0.7.1 but only on the 3 that survived
+0.3.4, and drawing 0.7.1 over the shared 3 would report its runtime on a case
+set it never failed on.
 
 Normalization is per block - divided by that case's CCTA mesh vertex count,
 except `intravascular_alignment` (`from_file_singlepair`), which is IVUS work
@@ -45,7 +51,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from multimodars_performance.mm_perf import BLOCKS, OUTPUT_DIR  # noqa: E402
 
-OLD, NEW = "0.3.4", "0.7.0"
+OLD, NEW = "0.3.4", "0.7.1"
 COLORS = {OLD: "#C1443C", NEW: "#2C6FB5"}
 FAIL = "#B3261E"
 
@@ -130,17 +136,23 @@ def _values(frame: pd.DataFrame, column: str, denominator: str | None) -> pd.Ser
 
 
 def _paired(frames, column: str, denominator: str | None = None) -> pd.DataFrame:
-    """Both versions' per-case values, aligned on the cases both completed.
+    """Both versions' per-case values, aligned on the union of the cases.
 
-    A column only one version produced (0.3.4 has no `discretization`) comes
-    back with that version's column empty rather than as an empty frame, so the
-    surviving box is still drawn.
+    The union, not the intersection: `stitching` and `post_processing` ran on
+    all 14 cases in 0.7.1 but only on the 3 that survived 0.3.4's stitching, and
+    intersecting would shrink the 0.7.1 box to those 3 - reporting a version's
+    runtime over a case set it never failed on. Each box therefore shows what
+    that version actually measured, and its n is printed underneath.
+
+    Rows are only complete where both versions have a value, so the paired
+    Wilcoxon (`_pvalue`) still compares like with like. A column only one
+    version produced (0.3.4 has no `discretization`) comes back with that
+    version's column all-NaN rather than as an empty frame, so the surviving
+    box is still drawn.
     """
     values = {version: _values(frame, column, denominator) for version, frame in frames.items()}
-    common = values[OLD].index.intersection(values[NEW].index)
-    if len(common):
-        return pd.DataFrame({version: series.loc[common] for version, series in values.items()})
-    return pd.DataFrame({OLD: values[OLD], NEW: values[NEW]})
+    cases = values[OLD].index.union(values[NEW].index)
+    return pd.DataFrame({version: series.reindex(cases) for version, series in values.items()})
 
 
 def _sum_blocks(frames, blocks: list[str]) -> pd.DataFrame:
@@ -188,8 +200,9 @@ def _draw_boxes(axis, groups, scale: float = 1.0, n_cases: int | None = None,
 
     One pair per entry in *groups*, positioned at 0, 1, 2, ... Each pair gets a
     significance bracket; each box gets an x tick label naming the version and
-    its case count, reddened when cases are missing because that version
-    crashed on them.
+    its own case count, reddened when that version is short of cases because it
+    crashed on them - counted per version, since the two no longer share a case
+    set (see `_paired`).
     """
     rng = np.random.default_rng(0)
     offsets = {OLD: -gap / 2, NEW: gap / 2}
@@ -197,9 +210,6 @@ def _draw_boxes(axis, groups, scale: float = 1.0, n_cases: int | None = None,
     ticks, labels, colors = [], [], []
 
     for index, (_, paired) in enumerate(groups):
-        count = max((len(paired[v].dropna()) for v in (OLD, NEW) if v in paired), default=0)
-        missing = 0 if n_cases is None else n_cases - count
-
         for version in (OLD, NEW):
             position = index + offsets[version]
             ticks.append(position)
@@ -226,9 +236,10 @@ def _draw_boxes(axis, groups, scale: float = 1.0, n_cases: int | None = None,
                 "o", color="black", markersize=2.8, linestyle="none", zorder=5,
             )
             # Headroom above the data itself: a panel with no significance
-            # bracket (0.7.0 only) would otherwise clip its topmost case.
+            # bracket (0.7.1 only) would otherwise clip its topmost case.
             ceiling = max(ceiling, float(series.max()) * 1.15)
             labels.append(f"{version}\nn={len(series)}")
+            missing = 0 if n_cases is None else n_cases - len(series)
             colors.append(FAIL if missing else "black")
 
         if not (_has(paired, OLD) and _has(paired, NEW)):
@@ -289,11 +300,15 @@ def _grid_figure(groups, ylabel, path, footnote, n_cases, scale=1.0, ncols=5):
             if not _has(paired, OLD):
                 axis.text(0, axis.get_ylim()[1] * 0.5, "not available\nin 0.3.4",
                           ha="center", va="center", fontsize=7.5, style="italic", color=FAIL)
-            missing = n_cases - max(
-                (len(paired[v].dropna()) for v in (OLD, NEW) if v in paired), default=0
-            )
-            if missing and _has(paired, OLD):
-                axis.text(0.5, 1.005, f"{missing}/{n_cases} failed in 0.3.4",
+            # Per version: a block can be complete in one and short in the
+            # other, as stitching is (all 14 in 0.7.1, 3 in 0.3.4).
+            short = [
+                f"{n_cases - len(paired[v].dropna())}/{n_cases} failed in {v}"
+                for v in (OLD, NEW)
+                if _has(paired, v) and len(paired[v].dropna()) < n_cases
+            ]
+            if short:
+                axis.text(0.5, 1.005, ", ".join(short),
                           transform=axis.transAxes, ha="center", va="bottom",
                           fontsize=7.5, color=FAIL)
         for axis in axes[len(groups):]:
@@ -360,7 +375,13 @@ def _write_summary(groups, path: Path, n_cases: int, scale: float = 1.0, unit: s
             row[f"{version}_q1"] = series.quantile(0.25) if len(series) else np.nan
             row[f"{version}_q3"] = series.quantile(0.75) if len(series) else np.nan
         if _has(paired, OLD) and _has(paired, NEW):
-            row["ratio_old_over_new"] = row[f"{OLD}_median"] / row[f"{NEW}_median"]
+            # Over the complete pairs only: where the two ran on different case
+            # sets (stitching, post-processing) a ratio of the two full medians
+            # would compare 3 cases against 14. Unscaled - a ratio is invariant.
+            both = paired.dropna()
+            row["ratio_old_over_new"] = (
+                both[OLD].median() / both[NEW].median() if len(both) else np.nan
+            )
             p, n = _pvalue(paired)
             row["p_wilcoxon"] = p
             row["n_pairs"] = n
@@ -380,9 +401,10 @@ def make_plots(output_dir: Path = OUTPUT_DIR, plot_dir: Path | None = None) -> N
     raw_blocks = [(block, _paired(frames, block)) for block in BLOCKS]
     norm_blocks = [(block, _paired(frames, block, POINT_COLUMN[block])) for block in BLOCKS]
 
-    # Blocks every case got through in both versions. Summing only these gives a
-    # total backed by all 14 cases, alongside the end-to-end total that only the
-    # cases surviving 0.3.4's stitching can support.
+    # Blocks every case got through in both versions - `dropna` leaves the
+    # complete pairs. Summing only these gives a total backed by all 14 cases in
+    # both versions, alongside the end-to-end total, where 0.3.4 has only the
+    # cases that survived its stitching.
     full_n = max(len(paired.dropna()) for _, paired in raw_blocks)
     shared = [block for block, paired in raw_blocks if len(paired.dropna()) == full_n]
 
@@ -399,8 +421,9 @@ def make_plots(output_dir: Path = OUTPUT_DIR, plot_dir: Path | None = None) -> N
     )
     normalized_note = ("\nNormalized per CCTA mesh vertex, except intravascular alignment "
                        "(per IVUS contour point).")
-    total_note = ("\nLeft: cases that ran end to end in both versions. Right: per-case sum over "
-                  "only the blocks no case failed, so all cases contribute.")
+    total_note = ("\nLeft: each version over the cases it ran end to end - every case for 0.7.1, "
+                  "the rest crashed in 0.3.4. Right: per-case sum over only the blocks no case "
+                  "failed, so all cases contribute to both boxes.")
 
     _grid_figure(raw_blocks, "Time (s)", plot_dir / "per_step.png", method, n_cases)
     _grid_figure(norm_blocks, "Time per point (µs)", plot_dir / "per_step_normalized.png",

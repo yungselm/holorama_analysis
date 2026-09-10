@@ -10,5 +10,5 @@ dependencies = [
     "pandas>=3.0.5",
     "scipy>=1.15.0",
     # "multimodars[meshlab]==0.3.4",
-    "multimodars[meshlab]==0.7.0",
+    "multimodars[meshlab]==0.7.1",
 ]

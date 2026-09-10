@@ -2,8 +2,8 @@
 
 Registered in mm_perf.PIPELINES, which calls run_case() per NARCO_ folder.
 
-This mirrors the 0.7.0 pipeline block for block, so the two CSVs line up.
-Where 0.3.4 lacks a capability the 0.7.0 pipeline relies on, the gap is closed
+This mirrors the 0.7.1 pipeline block for block, so the two CSVs line up.
+Where 0.3.4 lacks a capability the 0.7.1 pipeline relies on, the gap is closed
 in `compat_0_3_4` (centerline reading and preparation) or `refs_cache`
 (alignment reference points), and every such point is marked `# 0.3.4:` below.
 The shape of those gaps is the result being measured, so they are worked
@@ -12,7 +12,7 @@ around rather than papered over:
 * `discretization` has no counterpart at all - 0.3.4 has no
   `discretize_vessel_tree` - so that block is left unrecorded and shows up
   empty in the CSV.
-* `preprocessing` does in Python what 0.7.0 does in Rust, which is why it is
+* `preprocessing` does in Python what 0.7.1 does in Rust, which is why it is
   the block expected to move the most.
 
 Reference: the v0.3.4 `examples/stitching.py` in multimoda-rs, which is the
@@ -34,7 +34,7 @@ from multimodars_performance.compat_0_3_4 import (
 from multimodars_performance.mm_perf import CENTERLINE_CSV_DIR, REFERENCES_PATH, CaseResult
 from multimodars_performance.refs_cache import load_references
 
-# 0.7.0 asks for an arc length in mm (range_mm_takeoff_rca=45.0, walked at
+# 0.7.1 asks for an arc length in mm (range_mm_takeoff_rca=45.0, walked at
 # step_size_mm=0.5); 0.3.4 counts centerline points instead. At the 0.5 mm
 # spacing both pipelines resample to, 45 mm is 90 points.
 N_POINTS_INTRAMURAL = int(45.0 / 0.5)
@@ -43,10 +43,10 @@ N_POINTS_INTRAMURAL = int(45.0 / 0.5)
 def _frame_spacing_mm(frames) -> float:
     """Mean distance between consecutive lumen centroids.
 
-    0.7.0's `align_combined` returns this as `spacing_mm` so the remaining
+    0.7.1's `align_combined` returns this as `spacing_mm` so the remaining
     centerlines can be resampled to match the frame spacing. 0.3.4 returns only
     the resampled centerline, so the same number is derived here from the
-    aligned frames, which is how 0.7.0 defines it.
+    aligned frames, which is how 0.7.1 defines it.
     """
     centroids = np.array([frame.lumen.centroid for frame in frames], dtype=float)
     return float(np.linalg.norm(np.diff(centroids, axis=0), axis=1).mean())
@@ -61,14 +61,14 @@ def run_case(case_path: Path) -> CaseResult:
         csv_paths = ensure_centerline_csvs(case_path, CENTERLINE_CSV_DIR)
         # 0.3.4: no discretize_vessel_tree, so the alignment reference triplet
         # cannot be computed; the v0.3.4 workflow hardcoded it per case. Reuse
-        # the triplet the 0.7.0 run cached, so both align against the same one.
+        # the triplet the 0.7.1 run cached, so both align against the same one.
         ref_points = load_references(REFERENCES_PATH, case_path.name)
 
         with chdir(case_path):
             with result.timed("preprocessing"):
                 # 0.3.4: no load_centerline/prepare_centerline. Read the CSVs as
                 # the v0.3.4 example did, then trim/resample/orient/smooth in
-                # numpy to match what 0.7.0 does natively.
+                # numpy to match what 0.7.1 does natively.
                 aorta_pts = prepare_centerline_np(
                     np.genfromtxt(csv_paths["ao"], delimiter=","),
                     spacing_mm=0.5,
@@ -94,7 +94,7 @@ def run_case(case_path: Path) -> CaseResult:
             with result.timed("labelling"):
                 # 0.3.4: one shared bounding-sphere radius instead of one per
                 # vessel, a point count instead of an arc length for the takeoff
-                # range, and no step size. anomalous_* is what 0.7.0 renamed to
+                # range, and no step size. anomalous_* is what 0.7.1 renamed to
                 # acute_takeoff_*.
                 results, _ = mm.label_geometry(
                     path_ccta_geometry="./aortic_root.stl",
@@ -141,7 +141,7 @@ def run_case(case_path: Path) -> CaseResult:
                     watertight=False,
                 )
             # 0.3.4: PyCenterline has no resample(), so redo it in numpy at the
-            # spacing 0.7.0 would have returned.
+            # spacing 0.7.1 would have returned.
             spacing_mm = _frame_spacing_mm(aligned.geom_a.frames)
             aorta_cl = mm.numpy_to_centerline(resample_centerline(aorta_pts, spacing_mm))
             rca_cl = mm.numpy_to_centerline(resample_centerline(rca_pts, spacing_mm))

@@ -1,4 +1,4 @@
-"""Timed CCTA/IVUS fusion pipeline for multimodars 0.7.0.
+"""Timed CCTA/IVUS fusion pipeline for multimodars 0.7.1.
 
 Registered in mm_perf.PIPELINES, which calls run_case() per NARCO_ folder.
 """
